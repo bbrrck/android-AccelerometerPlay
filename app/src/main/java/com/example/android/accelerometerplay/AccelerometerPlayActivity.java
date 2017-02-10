@@ -12,6 +12,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ *
+ * modified file (C) 2017 Tibor Stanko
+ *
+ *      https://github.com/bbrrck/android-AccelerometerPlay *
+ *
  */
 
 package com.example.android.accelerometerplay;
@@ -32,6 +38,7 @@ import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.Display;
 import android.view.Surface;
 import android.view.View;
@@ -123,6 +130,7 @@ public class AccelerometerPlayActivity extends Activity {
         private final int mDstHeight;
 
         private Sensor mAccelerometer;
+        private Sensor mMagnetometer;
         private long mLastT;
 
         private float mXDpi;
@@ -318,6 +326,7 @@ public class AccelerometerPlayActivity extends Activity {
              * CPU resources.
              */
             mSensorManager.registerListener(this, mAccelerometer, SensorManager.SENSOR_DELAY_GAME);
+            mSensorManager.registerListener(this, mMagnetometer, SensorManager.SENSOR_DELAY_GAME);
         }
 
         public void stopSimulation() {
@@ -327,6 +336,7 @@ public class AccelerometerPlayActivity extends Activity {
         public SimulationView(Context context) {
             super(context);
             mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            mMagnetometer = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
 
             DisplayMetrics metrics = new DisplayMetrics();
             getWindowManager().getDefaultDisplay().getMetrics(metrics);
@@ -355,8 +365,33 @@ public class AccelerometerPlayActivity extends Activity {
             mVerticalBound = ((h / mMetersToPixelsY - sBallDiameter) * 0.5f);
         }
 
+        float[] mAcc;
+        float[] mMag;
+
         @Override
         public void onSensorChanged(SensorEvent event) {
+        
+            if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER){
+                mAcc = event.values;
+                //Log.i( "Acc:", String.format(" %+5.2f  %+5.2f  %+5.2f",mAcc[0],mAcc[1],mAcc[2]));
+            }
+
+            if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD){
+                mMag = event.values;
+                //Log.i( "Mag:", String.format(" %+5.2f  %+5.2f  %+5.2f",mMag[0],mMag[1],mMag[2]));
+            }
+
+            if (mAcc != null && mMag != null) {
+                float R[] = new float[9];
+                float I[] = new float[9];
+                boolean success = SensorManager.getRotationMatrix(R, I, mAcc, mMag);
+                if (success){
+                    String rf = " %+8.8f";
+                    Log.i( "R:", String.format(rf+rf+rf+rf+rf+rf+rf+rf+rf,
+                            R[0],R[1],R[2],R[3],R[4],R[5],R[6],R[7],R[8]));
+                }
+            }
+
             if (event.sensor.getType() != Sensor.TYPE_ACCELEROMETER)
                 return;
             /*
