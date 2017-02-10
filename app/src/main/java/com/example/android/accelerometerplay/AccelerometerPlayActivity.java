@@ -46,6 +46,8 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
+import java.util.Arrays;
+
 /**
  * This is an example of using the accelerometer to integrate the device's
  * acceleration to a position using the Verlet method. This is illustrated with
@@ -383,13 +385,9 @@ public class AccelerometerPlayActivity extends Activity {
 
             if (mAcc != null && mMag != null) {
                 float R[] = new float[9];
-                float I[] = new float[9];
-                boolean success = SensorManager.getRotationMatrix(R, I, mAcc, mMag);
-                if (success){
-                    String rf = " %+8.8f";
-                    Log.i( "R:", String.format(rf+rf+rf+rf+rf+rf+rf+rf+rf,
-                            R[0],R[1],R[2],R[3],R[4],R[5],R[6],R[7],R[8]));
-                }
+                boolean success = SensorManager.getRotationMatrix(R, null, mAcc, mMag);
+                if (success)
+                    Log.i( "R:", Arrays.toString(R) );
             }
 
             if (event.sensor.getType() != Sensor.TYPE_ACCELEROMETER)
