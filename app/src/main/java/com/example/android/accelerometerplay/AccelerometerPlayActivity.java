@@ -34,19 +34,30 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Display;
+import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 
 /**
  * This is an example of using the accelerometer to integrate the device's
@@ -135,6 +146,13 @@ public class AccelerometerPlayActivity extends Activity {
         private Sensor mMagnetometer;
         private long mLastT;
 
+        float[] mAcc;
+        float[] mMag;
+        boolean mScanOn;
+
+        File mMriderFile;
+        int numpts;
+
         private float mXDpi;
         private float mYDpi;
         private float mMetersToPixelsX;
@@ -219,7 +237,7 @@ public class AccelerometerPlayActivity extends Activity {
          * A particle system is just a collection of particles
          */
         class ParticleSystem {
-            static final int NUM_PARTICLES = 5;
+            static final int NUM_PARTICLES = 1;
             private Particle mBalls[] = new Particle[NUM_PARTICLES];
 
             ParticleSystem() {
@@ -232,6 +250,16 @@ public class AccelerometerPlayActivity extends Activity {
                     mBalls[i].setLayerType(LAYER_TYPE_HARDWARE, null);
                     addView(mBalls[i], new ViewGroup.LayoutParams(mDstWidth, mDstHeight));
                 }
+            }
+
+            public void scanOn() {
+                for (int i = 0; i < mBalls.length; i++)
+                    mBalls[i].setBackgroundResource(R.drawable.redball);
+            }
+
+            public void scanOff() {
+                for (int i = 0; i < mBalls.length; i++)
+                    mBalls[i].setBackgroundResource(R.drawable.ball);
             }
 
             /*
@@ -335,6 +363,25 @@ public class AccelerometerPlayActivity extends Activity {
             mSensorManager.unregisterListener(this);
         }
 
+        public boolean isExternalStorageWritable() {
+            String state = Environment.getExternalStorageState();
+            if (Environment.MEDIA_MOUNTED.equals(state))
+                return true;
+            return false;
+        }
+
+        private void writeToFile(String data,Context context,boolean append) {
+            try {
+                BufferedWriter writer = new BufferedWriter(
+                        new FileWriter(mMriderFile,append));
+                writer.write(data+"\n");
+                writer.close();
+            }
+            catch (IOException e) {
+                Log.e("Exception","File write failed: "+e.toString());
+            }
+        }
+
         public SimulationView(Context context) {
             super(context);
             mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
@@ -355,6 +402,13 @@ public class AccelerometerPlayActivity extends Activity {
             Options opts = new Options();
             opts.inDither = true;
             opts.inPreferredConfig = Bitmap.Config.RGB_565;
+
+            mScanOn = false;
+            //R00 = new ArrayList();
+
+            mMriderFile = new File( context.getExternalFilesDir(null), "mrider.txt");
+            // clear the file
+            writeToFile("MORPHORIDER NETWORK",context,false/*append*/);
         }
 
         @Override
@@ -367,29 +421,41 @@ public class AccelerometerPlayActivity extends Activity {
             mVerticalBound = ((h / mMetersToPixelsY - sBallDiameter) * 0.5f);
         }
 
-        float[] mAcc;
-        float[] mMag;
-
         @Override
         public void onSensorChanged(SensorEvent event) {
-        
-            if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER){
-                mAcc = event.values;
-                //Log.i( "Acc:", String.format(" %+5.2f  %+5.2f  %+5.2f",mAcc[0],mAcc[1],mAcc[2]));
-            }
 
-            if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD){
-                mMag = event.values;
-                //Log.i( "Mag:", String.format(" %+5.2f  %+5.2f  %+5.2f",mMag[0],mMag[1],mMag[2]));
-            }
+            if( mScanOn ) {
 
-            if (mAcc != null && mMag != null) {
-                float R[] = new float[9];
-                boolean success = SensorManager.getRotationMatrix(R, null, mAcc, mMag);
-                if (success)
-                    Log.i( "R:", Arrays.toString(R) );
-            }
+                // Get accelerometer values
+                if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+                    mAcc = event.values;
+                    //Log.i( "Acc:", String.format(" %+5.2f  %+5.2f  %+5.2f",mAcc[0],mAcc[1],mAcc[2]));
+                }
 
+                // Get magnetometer values
+                if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
+                    mMag = event.values;
+                    //Log.i( "Mag:", String.format(" %+5.2f  %+5.2f  %+5.2f",mMag[0],mMag[1],mMag[2]));
+                }
+
+                // Compute rotation matrix from mAcc and mMag
+                if (mAcc != null && mMag != null) {
+                    float R[] = new float[9];
+                    boolean success = SensorManager.getRotationMatrix(R, null, mAcc, mMag);
+                    if (success) {
+                        long seconds = System.currentTimeMillis();
+                        String outputString = String.format("%16d ",seconds);
+                        for (int i=0; i<9; i++ )
+                            outputString += String.format("%+8.8f ",R[i]);
+                        writeToFile(outputString, this.getContext(),true/*append*/);
+                        numpts++;
+
+                        // Output stuff to log
+                        Log.i("R", Arrays.toString(R));
+                        //Log.i("time",""+seconds);
+                    }
+                }
+            }
             if (event.sensor.getType() != Sensor.TYPE_ACCELEROMETER)
                 return;
             /*
@@ -419,6 +485,32 @@ public class AccelerometerPlayActivity extends Activity {
                     mSensorY = -event.values[0];
                     break;
             }
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            mScanOn = !mScanOn;
+            if (mScanOn) {
+                if (!isExternalStorageWritable()) {
+                    mScanOn = false;
+                    Log.e("File IO", "External storage not writable.");
+                }
+                else {
+                    writeToFile("CURVE",this.getContext(),true/*append*/);
+                    writeToFile("NODE",this.getContext(),true/*append*/);
+                    mParticleSystem.scanOn();
+                    Log.i("Scanning","In progress...");
+                    numpts = 0;
+                }
+            } else {
+                writeToFile("NODE",this.getContext(),true/*append*/);
+                writeToFile("END "+numpts,this.getContext(),true/*append*/);
+                mParticleSystem.scanOff();
+                Log.i("Scanning","End.");
+                Log.i("Scanning","Scanned "+numpts+" points.");
+            }
+            //Log.i("XY", String.format( "+%8.8f +%8.8f",event.getX(),event.getY()));
+            return super.onTouchEvent(event);
         }
 
         @Override
